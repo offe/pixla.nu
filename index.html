@@ -30,10 +30,14 @@
         #palette {
             margin: 128px 0px 128px 64px;
         }
+
     </style>
     <script type="text/javascript">
-        // Use UInt8Array
+        // rle
+        // base64
+        // favicon
         // Draw pixel under mouse of right color, restore when leave
+        // Digital Ocean
 
         p8cols = [
             "#000000", "#1D2B53", "#7E2553", "#008751",
@@ -59,7 +63,6 @@
                     var y = flr((e.pageY - this.canvas.offsetTop) / this.s);
                     this.mouseHandler(t, x, y, b);
                     //document.getElementById("log").innerHTML = JSON.stringify([t, x, y, b]);
-
                 }
 
                 canvas.onmousedown = (e) => {
@@ -75,7 +78,6 @@
                     this.callMouseHandler(e, "m", e.button);
                     old_onmousemove(e);
                 }
-
             }
 
             cls(c = 0) {
@@ -124,11 +126,85 @@
             }
         }
 
+        function hexbyte(v) {
+            return ("0" + (Number(v).toString(16))).slice(-2);
+        }
+
+        function rle_encode(a) {
+            var n = a.length;
+            var run = 0;
+            var e = a[0];
+            var last = e;
+            var runs = [];
+            for (var i = 1; i <= n; i++) {
+                if (e !== last || run == 128) {
+                    runs.push([run, last]);
+                    run = 0;
+                    last = e;
+                }
+                e = a[i];
+                run++;
+            }
+            runs.push([run, last]);
+            console.log(runs);
+            n = runs.length;
+            e = runs[0];
+            var c;
+            var chunks = [];
+            for (var i = 1; i < n; i++) {
+                c = runs[i];
+                // We're holding a run, or current is a run, or we're holding a mixed with max size
+                if ((e[1].length == 2 && e[0] > 1) || (c[0] > 1) || (e[0] == 128)) {
+                    chunks.push(e);
+                    e = c;
+                    continue;
+                }
+                // Build on a mixed chain
+                if (c[0] == 1) {
+                    e = [e[0] + c[0], e[1] + c[1]];
+                }
+
+            }
+            chunks.push(e);
+            console.log(chunks);
+            var encoded = chunks.map(([n, bs]) => (hexbyte(n - 1 + (bs.length > 2 ? 128 : 0)) + bs)).join('');
+            return encoded;
+        }
+
+        function hexToBase64(str) {
+            return btoa(String.fromCharCode.apply(null,
+                str.replace(/\r|\n/g, "").replace(/([\da-fA-F]{2}) ?/g, "0x$1 ").replace(/ +$/, "").split(" ")));
+        }
+
+        function base64ToHex(str) {
+            for (var i = 0, bin = atob(str.replace(/[ \r\n]+$/, "")), hex = []; i < bin.length; ++i) {
+                var tmp = bin.charCodeAt(i).toString(16);
+                if (tmp.length === 1) tmp = "0" + tmp;
+                hex[hex.length] = tmp;
+            }
+            return hex.join(" ");
+        }
+
+        // Convert from normal to web-safe, strip trailing "="s
+        function webSafe64(base64) {
+            return base64.replace(/\+/g, '.').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        // Convert from web-safe to normal, add trailing "="s
+        function normal64(base64) {
+            return base64.replace(/\./g, '+').replace(/_/g, '/') + '=='.substring(0, (3 * base64.length) % 4);
+        }
+
         function updateUrl(drawing) {
             var hex_string = Array.from(drawing.ps).map(v => "0123456789abcdef" [v % 16]).join('');
             writeSearch({
                 "ps": hex_string
             });
+            console.log(hex_string);
+            var bytes = hex_string.match(/.{1,2}/g);
+            var rle = rle_encode(bytes);
+            console.log(rle);
+            console.log(webSafe64(hexToBase64(rle)));
         }
 
         function toggleMinimalistic() {
@@ -216,6 +292,7 @@
             //}
 
         }
+
     </script>
 </head>
 
@@ -224,4 +301,6 @@
         <canvas id="drawing" oncontextmenu="event.preventDefault();" width="512" height="512"></canvas><canvas id="palette" oncontextmenu="event.preventDefault();" width="256" height="256"></canvas>
         <div id="log" style="padding: 64px; color: #aaaaaa;"></div>
     </div>
-</body></html>
+</body>
+
+</html>
