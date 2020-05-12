@@ -69,33 +69,60 @@
                 canvas.onmousedown = (e) => {
                     this.callMouseHandler(e, "d", e.button);
                 }
-                var old_onmouseup = window.onmouseup || ((e) => {});
-                window.onmouseup = (e) => {
-                    this.callMouseHandler(e, "u", e.button);
-                    old_onmouseup(e);
+                canvas.onmouseleave = (e) => {
+                    this.callMouseHandler(e, "l", e.button);
                 }
-                var old_onmousemove = window.onmousemove || ((e) => {});
-                window.onmousemove = (e) => {
+                //var old_onmouseup = window.onmouseup || ((e) => {});
+                canvas.onmouseup = (e) => {
+                    this.callMouseHandler(e, "u", e.button);
+                    //old_onmouseup(e);
+                }
+                //var old_onmousemove = window.onmousemove || ((e) => {});
+                canvas.onmousemove = (e) => {
                     this.callMouseHandler(e, "m", e.button);
-                    old_onmousemove(e);
+                    //old_onmousemove(e);
                 }
             }
 
             cls(c = 0) {
                 c = flr(c) % 16;
                 this.ps.fill(c);
-                this.ctx.fillStyle = p8cols[flr(c) % 16];
+                this.ctx.fillStyle = p8cols[c];
                 this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             }
 
             pset(x, y, c) {
                 var s = this.s;
-                x = flr(x) % 32;
-                y = flr(y) % 32;
+                x = flr(x);
+                if (x < 0 || x >= this.width) return;
+                y = flr(y);
+                if (y < 0 || y >= this.height) return;
                 c = flr(c) % 16;
                 this.ps[y * this.width + x] = c;
                 this.ctx.fillStyle = p8cols[c];
                 this.ctx.fillRect(x * s, y * s, s, s);
+            }
+
+            line(x0, y0, x1, y1, c) {
+                var dx = Math.abs(x1 - x0);
+                var dy = Math.abs(y1 - y0);
+                var sx = (x0 < x1) ? 1 : -1;
+                var sy = (y0 < y1) ? 1 : -1;
+                var err = dx - dy;
+
+                this.pset(x0, y0, c);
+                while ((x0 !== x1) || (y0 !== y1)) {
+                    var e2 = 2 * err;
+                    if (e2 > -dy) {
+                        err -= dy;
+                        x0 += sx;
+                    }
+                    if (e2 < dx) {
+                        err += dx;
+                        y0 += sy;
+                    }
+                    this.pset(x0, y0, c);
+                }
             }
 
             pget(x, y, c) {
@@ -237,34 +264,18 @@
             image_string = webSafe64(hexToBase64(rle));
             return image_string;
         }
-        
+
         function pixlaStringToA(p) {
             decoded_rle = base64ToHex(normal64(p))
             im = rle_decode(decoded_rle);
             return toHexString(im);
         }
-        
+
         function updateUrl(drawing) {
             var pixla_string = aToPixlaString(Array.from(drawing.ps));
-            //var hex_string = Array.from(drawing.ps).map(v => "0123456789abcdef" [v % 16]).join('');
-            //writeSearch({
-            //    "ps": hex_string
-            //});
-            //console.log(hex_string);
-            //var bytes = hex_string.match(/.{1,2}/g);
-            //rle = rle_encode(bytes);
-            //console.log(rle);
-            //console.log(webSafe64(hexToBase64(rle)));
-            //image_string = webSafe64(hexToBase64(rle));
             writeSearch({
                 "ps": pixla_string
             });
-
-            //decoded_rle = base64ToHex(normal64(image_string))
-            //console.log(decoded_rle);
-            //im = rle_decode(decoded_rle);
-            //console.log(toHexString(im));
-            //console.log(hex_string);
         }
 
         function toggleMinimalistic() {
@@ -293,14 +304,20 @@
                         if (b === 0) {
                             leftDown = true;
                             drawing.pset(x, y, pickedColor);
+                            drawing.old_mouse = [x, y];
                         } else if (b === 2) {
                             pickedColor = drawing.pget(x, y);
                         }
                     } else if (e == "u" && b === 0) {
                         leftDown = false;
                         updateUrl(drawing);
+                    } else if (e == "l" && leftDown) {
+                        leftDown = false;
+                        updateUrl(drawing);
                     } else if (e == "m" && leftDown) {
-                        drawing.pset(x, y, pickedColor);
+                        //drawing.pset(x, y, pickedColor);
+                        drawing.line(drawing.old_mouse[0], drawing.old_mouse[1], x, y, pickedColor);
+                        drawing.old_mouse = [x, y];
                     }
                 }
             );
@@ -313,6 +330,10 @@
                         drawing.pset(x, y, parseInt(ps[y * drawing.width + x], 16));
                     }
                 }
+                //drawing.line(2, 3, 28, 7, 10);
+                //drawing.line(28, 7, 26, 30, 10);
+                //drawing.line(26, 30, 3, 14, 10);
+                //drawing.line(3, 14, 2, 3, 10);
             } else {
                 var x, y;
                 for (x = 0; x < 32; x++) {
