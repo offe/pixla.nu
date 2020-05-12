@@ -11,7 +11,7 @@
     <meta name="twitter:image:alt" content="Pixelkonst från pixla.nu">
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    
+
     <style type="text/css">
         body {
             background-color: #101820;
@@ -172,6 +172,34 @@
             return encoded;
         }
 
+        function rle_decode(a) {
+            var a = fromHexString(a);
+            var d = new Uint8Array(512);
+            var i = 0;
+            var j = 0;
+            var s = a.length;
+            while (i < s) {
+                var e = a[i++];
+                var n = (e & 127) + 1;
+                if (e < 128) {
+                    var c = a[i++];
+                    console.log([n, c]);
+                    //j += n;
+                    for (var k = 0; k < n; ++k) {
+                        d[j++] = c;
+                    }
+                } else {
+                    console.log([n]);
+                    //i += n;
+                    //j += n;
+                    for (var k = 0; k < n; ++k) {
+                        d[j++] = a[i++];
+                    }
+                }
+            }
+            return d;
+        }
+
         function hexToBase64(str) {
             return btoa(String.fromCharCode.apply(null,
                 str.replace(/\r|\n/g, "").replace(/([\da-fA-F]{2}) ?/g, "0x$1 ").replace(/ +$/, "").split(" ")));
@@ -183,7 +211,7 @@
                 if (tmp.length === 1) tmp = "0" + tmp;
                 hex[hex.length] = tmp;
             }
-            return hex.join(" ");
+            return hex.join("");
         }
 
         // Convert from normal to web-safe, strip trailing "="s
@@ -196,16 +224,47 @@
             return base64.replace(/\./g, '+').replace(/_/g, '/') + '=='.substring(0, (3 * base64.length) % 4);
         }
 
-        function updateUrl(drawing) {
-            var hex_string = Array.from(drawing.ps).map(v => "0123456789abcdef" [v % 16]).join('');
-            writeSearch({
-                "ps": hex_string
-            });
-            console.log(hex_string);
+        const fromHexString = hexString =>
+            new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+        const toHexString = bytes =>
+            bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
+
+        function aToPixlaString(a) {
+            var hex_string = a.map(v => "0123456789abcdef" [v % 16]).join('');
             var bytes = hex_string.match(/.{1,2}/g);
-            var rle = rle_encode(bytes);
-            console.log(rle);
-            console.log(webSafe64(hexToBase64(rle)));
+            rle = rle_encode(bytes);
+            image_string = webSafe64(hexToBase64(rle));
+            return image_string;
+        }
+        
+        function pixlaStringToA(p) {
+            decoded_rle = base64ToHex(normal64(p))
+            im = rle_decode(decoded_rle);
+            return toHexString(im);
+        }
+        
+        function updateUrl(drawing) {
+            var pixla_string = aToPixlaString(Array.from(drawing.ps));
+            //var hex_string = Array.from(drawing.ps).map(v => "0123456789abcdef" [v % 16]).join('');
+            //writeSearch({
+            //    "ps": hex_string
+            //});
+            //console.log(hex_string);
+            //var bytes = hex_string.match(/.{1,2}/g);
+            //rle = rle_encode(bytes);
+            //console.log(rle);
+            //console.log(webSafe64(hexToBase64(rle)));
+            //image_string = webSafe64(hexToBase64(rle));
+            writeSearch({
+                "ps": pixla_string
+            });
+
+            //decoded_rle = base64ToHex(normal64(image_string))
+            //console.log(decoded_rle);
+            //im = rle_decode(decoded_rle);
+            //console.log(toHexString(im));
+            //console.log(hex_string);
         }
 
         function toggleMinimalistic() {
@@ -247,7 +306,7 @@
             );
 
             if (!!initial_state["ps"]) {
-                var ps = initial_state["ps"];
+                var ps = pixlaStringToA(initial_state["ps"]);
                 var x, y;
                 for (x = 0; x < 32; x++) {
                     for (y = 0; y < 32; y++) {
