@@ -1,0 +1,307 @@
+<html>
+
+<head>
+    <meta property="og:title" content="Konst på pixla.nu">
+    <meta property="og:description" content="Pixla. Dela.">
+    <meta property="og:image" content="https://pixla.nu/og_image.png">
+    <meta property="og:url" content="https://pixla.nu">
+    <meta name="twitter:card" content="summary_large_image">
+    <!--  Non-Essential, But Recommended -->
+    <meta property="og:site_name" content="Pixla.nu">
+    <meta name="twitter:image:alt" content="Pixelkonst från pixla.nu">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <style type="text/css">
+        body {
+            background-color: #101820;
+            margin: 0;
+        }
+
+        .all {
+            width: 832px;
+            margin: 64px auto;
+        }
+
+        canvas {
+            user-select: none;
+            outline: none;
+        }
+
+        #palette {
+            margin: 128px 0px 128px 64px;
+        }
+
+    </style>
+    <script type="text/javascript">
+        // rle
+        // base64
+        // favicon
+        // Draw pixel under mouse of right color, restore when leave
+        // Digital Ocean
+
+        p8cols = [
+            "#000000", "#1D2B53", "#7E2553", "#008751",
+            "#AB5236", "#5F574F", "#C2C3C7", "#FFF1E8",
+            "#FF004D", "#FFA300", "#FFEC27", "#00E436",
+            "#29ADFF", "#83769C", "#FF77A8", "#FFCCAA"
+        ];
+
+        var flr = Math.floor;
+        class Bitmap {
+
+            constructor(canvas, width, height, mouseHandler = () => {}) {
+                this.ps = new Uint8Array(width * height);
+                this.canvas = canvas;
+                this.ctx = canvas.getContext("2d");
+                this.width = width;
+                this.height = height;
+                this.s = flr(canvas.width / width);
+                this.mouseHandler = mouseHandler;
+
+                this.callMouseHandler = (e, t, b) => {
+                    var x = flr((e.pageX - this.canvas.offsetLeft) / this.s);
+                    var y = flr((e.pageY - this.canvas.offsetTop) / this.s);
+                    this.mouseHandler(t, x, y, b);
+                    //document.getElementById("log").innerHTML = JSON.stringify([t, x, y, b]);
+                }
+
+                canvas.onmousedown = (e) => {
+                    this.callMouseHandler(e, "d", e.button);
+                }
+                var old_onmouseup = window.onmouseup || ((e) => {});
+                window.onmouseup = (e) => {
+                    this.callMouseHandler(e, "u", e.button);
+                    old_onmouseup(e);
+                }
+                var old_onmousemove = window.onmousemove || ((e) => {});
+                window.onmousemove = (e) => {
+                    this.callMouseHandler(e, "m", e.button);
+                    old_onmousemove(e);
+                }
+            }
+
+            cls(c = 0) {
+                c = flr(c) % 16;
+                this.ps.fill(c);
+                this.ctx.fillStyle = p8cols[flr(c) % 16];
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            pset(x, y, c) {
+                var s = this.s;
+                x = flr(x) % 32;
+                y = flr(y) % 32;
+                c = flr(c) % 16;
+                this.ps[y * this.width + x] = c;
+                this.ctx.fillStyle = p8cols[c];
+                this.ctx.fillRect(x * s, y * s, s, s);
+            }
+
+            pget(x, y, c) {
+                var x = flr(x) % 32;
+                var y = flr(y) % 32;
+                return this.ps[y * this.width + x];
+            }
+
+        }
+
+        function readSearch() {
+            var result = {}
+            var ms = window.location.search.substr(1).match(/.+=.+?(?=(.=)|$)/g)
+            ms && ms.forEach(
+                m => {
+                    var [k, v] = m.split('=');
+                    result[k] = v;
+                })
+            return result;
+        }
+
+        function writeSearch(d) {
+            var search = Object.entries(d).map(([k, v]) => k + "=" + v).join('&');
+            if (history.pushState) {
+                var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?' + search;
+                window.history.replaceState({
+                    path: newurl
+                }, '', newurl);
+            }
+        }
+
+        function hexbyte(v) {
+            return ("0" + (Number(v).toString(16))).slice(-2);
+        }
+
+        function rle_encode(a) {
+            var n = a.length;
+            var run = 0;
+            var e = a[0];
+            var last = e;
+            var runs = [];
+            for (var i = 1; i <= n; i++) {
+                if (e !== last || run == 128) {
+                    runs.push([run, last]);
+                    run = 0;
+                    last = e;
+                }
+                e = a[i];
+                run++;
+            }
+            runs.push([run, last]);
+            console.log(runs);
+            n = runs.length;
+            e = runs[0];
+            var c;
+            var chunks = [];
+            for (var i = 1; i < n; i++) {
+                c = runs[i];
+                // We're holding a run, or current is a run, or we're holding a mixed with max size
+                if ((e[1].length == 2 && e[0] > 1) || (c[0] > 1) || (e[0] == 128)) {
+                    chunks.push(e);
+                    e = c;
+                    continue;
+                }
+                // Build on a mixed chain
+                if (c[0] == 1) {
+                    e = [e[0] + c[0], e[1] + c[1]];
+                }
+
+            }
+            chunks.push(e);
+            console.log(chunks);
+            var encoded = chunks.map(([n, bs]) => (hexbyte(n - 1 + (bs.length > 2 ? 128 : 0)) + bs)).join('');
+            return encoded;
+        }
+
+        function hexToBase64(str) {
+            return btoa(String.fromCharCode.apply(null,
+                str.replace(/\r|\n/g, "").replace(/([\da-fA-F]{2}) ?/g, "0x$1 ").replace(/ +$/, "").split(" ")));
+        }
+
+        function base64ToHex(str) {
+            for (var i = 0, bin = atob(str.replace(/[ \r\n]+$/, "")), hex = []; i < bin.length; ++i) {
+                var tmp = bin.charCodeAt(i).toString(16);
+                if (tmp.length === 1) tmp = "0" + tmp;
+                hex[hex.length] = tmp;
+            }
+            return hex.join(" ");
+        }
+
+        // Convert from normal to web-safe, strip trailing "="s
+        function webSafe64(base64) {
+            return base64.replace(/\+/g, '.').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        // Convert from web-safe to normal, add trailing "="s
+        function normal64(base64) {
+            return base64.replace(/\./g, '+').replace(/_/g, '/') + '=='.substring(0, (3 * base64.length) % 4);
+        }
+
+        function updateUrl(drawing) {
+            var hex_string = Array.from(drawing.ps).map(v => "0123456789abcdef" [v % 16]).join('');
+            writeSearch({
+                "ps": hex_string
+            });
+            console.log(hex_string);
+            var bytes = hex_string.match(/.{1,2}/g);
+            var rle = rle_encode(bytes);
+            console.log(rle);
+            console.log(webSafe64(hexToBase64(rle)));
+        }
+
+        function toggleMinimalistic() {
+            var e = document.getElementById("palette");
+            if (e.style.visibility == "hidden") {
+                e.style.visibility = "visible";
+            } else {
+                e.style.visibility = "hidden";
+            }
+        }
+
+        function onload() {
+            var initial_state = readSearch();
+            console.log(initial_state);
+
+            var pickedColor = parseInt(initial_state['c']) || 0;
+            var leftDown = false;
+
+            function setColor(c) {
+                pickedColor = c;
+            }
+
+            var drawing = new Bitmap(document.getElementById('drawing'), 32, 32,
+                (e, x, y, b) => {
+                    if (e == "d") {
+                        if (b === 0) {
+                            leftDown = true;
+                            drawing.pset(x, y, pickedColor);
+                        } else if (b === 2) {
+                            pickedColor = drawing.pget(x, y);
+                        }
+                    } else if (e == "u" && b === 0) {
+                        leftDown = false;
+                        updateUrl(drawing);
+                    } else if (e == "m" && leftDown) {
+                        drawing.pset(x, y, pickedColor);
+                    }
+                }
+            );
+
+            if (!!initial_state["ps"]) {
+                var ps = initial_state["ps"];
+                var x, y;
+                for (x = 0; x < 32; x++) {
+                    for (y = 0; y < 32; y++) {
+                        drawing.pset(x, y, parseInt(ps[y * drawing.width + x], 16));
+                    }
+                }
+            } else {
+                var x, y;
+                for (x = 0; x < 32; x++) {
+                    for (y = 0; y < 32; y++) {
+                        drawing.pset(x, y, 15 - flr(Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5))) % 16);
+                    }
+                }
+            }
+
+            var palette = new Bitmap(document.getElementById('palette'), 4, 4, (e, x, y, b) => {
+                if (e == "d") {
+                    setColor(y * 4 + x);
+                }
+            })
+            var x, y;
+            for (x = 0; x < 4; x++) {
+                for (y = 0; y < 4; y++) {
+                    palette.pset(x, y, 4 * y + x);
+                }
+            }
+
+            key2col = "1234qwerasdfzxcv";
+
+            window.onkeydown = function(e) {
+                console.log(e.keyCode);
+                var new_color = key2col.indexOf(e.key);
+                if (e.code === "Delete") {
+                    drawing.cls(pickedColor);
+                } else if (e.code === "KeyM") {
+                    toggleMinimalistic();
+                } else if (new_color != -1) {
+                    pickedColor = new_color;
+                }
+            }
+            //window.onmousewheel = function(e) {
+            //    pickedColor += Math.sign(e.wheelDelta)
+            //}
+
+        }
+
+    </script>
+</head>
+
+<body onload="onload();">
+    <div class="all">
+        <canvas id="drawing" oncontextmenu="event.preventDefault();" width="512" height="512"></canvas><canvas id="palette" oncontextmenu="event.preventDefault();" width="256" height="256"></canvas>
+        <div id="log" style="padding: 64px; color: #aaaaaa;"></div>
+    </div>
+</body>
+
+</html>
