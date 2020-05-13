@@ -16,11 +16,21 @@
         body {
             background-color: #101820;
             margin: 0;
+            /* supported by Chrome and Opera */
+            user-select: none;
+            /* Safari */
+            -webkit-user-select: none;
+            /* Konqueror HTML */
+            -khtml-user-select: none;
+            /* Firefox */
+            -moz-user-select: none;
+            /* Internet Explorer/Edge */
+            -ms-user-select: none;
         }
 
         .all {
             width: 832px;
-            margin: 64px auto;
+            margin: 64px auto 0;
         }
 
         canvas {
@@ -34,11 +44,9 @@
 
     </style>
     <script type="text/javascript">
-        // rle
-        // base64
+        // Digital Ocean
         // favicon
         // Draw pixel under mouse of right color, restore when leave
-        // Digital Ocean
 
         p8cols = [
             "#000000", "#1D2B53", "#7E2553", "#008751",
@@ -66,21 +74,40 @@
                     //document.getElementById("log").innerHTML = JSON.stringify([t, x, y, b]);
                 }
 
+                this.callMouseHandlerWithTouch = (e, t) => {
+                    if (t === "e") {
+                        this.mouseHandler("u", 0, 0, 0);
+                    } else {
+                        var x = flr((e.touches[0].pageX - this.canvas.offsetLeft) / this.s);
+                        var y = flr((e.touches[0].pageY - this.canvas.offsetTop) / this.s);
+                        if (t === "s") {
+                            this.mouseHandler("d", x, y, 0);
+                        } else if (t === "f") {
+                            this.mouseHandler("m", x, y, 0);
+                        }
+                    }
+                }
+
                 canvas.onmousedown = (e) => {
                     this.callMouseHandler(e, "d", e.button);
                 }
                 canvas.onmouseleave = (e) => {
                     this.callMouseHandler(e, "l", e.button);
                 }
-                //var old_onmouseup = window.onmouseup || ((e) => {});
                 canvas.onmouseup = (e) => {
                     this.callMouseHandler(e, "u", e.button);
-                    //old_onmouseup(e);
                 }
-                //var old_onmousemove = window.onmousemove || ((e) => {});
                 canvas.onmousemove = (e) => {
                     this.callMouseHandler(e, "m", e.button);
-                    //old_onmousemove(e);
+                }
+                canvas.ontouchstart = (e) => {
+                    this.callMouseHandlerWithTouch(e, "s");
+                }
+                canvas.ontouchend = (e) => {
+                    this.callMouseHandlerWithTouch(e, "e");
+                }
+                canvas.ontouchmove = (e) => {
+                    this.callMouseHandlerWithTouch(e, "f");
                 }
             }
 
@@ -174,7 +201,6 @@
                 run++;
             }
             runs.push([run, last]);
-            console.log(runs);
             n = runs.length;
             e = runs[0];
             var c;
@@ -194,7 +220,6 @@
 
             }
             chunks.push(e);
-            console.log(chunks);
             var encoded = chunks.map(([n, bs]) => (hexbyte(n - 1 + (bs.length > 2 ? 128 : 0)) + bs)).join('');
             return encoded;
         }
@@ -210,15 +235,10 @@
                 var n = (e & 127) + 1;
                 if (e < 128) {
                     var c = a[i++];
-                    console.log([n, c]);
-                    //j += n;
                     for (var k = 0; k < n; ++k) {
                         d[j++] = c;
                     }
                 } else {
-                    console.log([n]);
-                    //i += n;
-                    //j += n;
                     for (var k = 0; k < n; ++k) {
                         d[j++] = a[i++];
                     }
@@ -289,7 +309,6 @@
 
         function onload() {
             var initial_state = readSearch();
-            console.log(initial_state);
 
             var pickedColor = parseInt(initial_state['c']) || 0;
             var leftDown = false;
@@ -297,6 +316,16 @@
             function setColor(c) {
                 pickedColor = c;
             }
+
+            handleBodyTouch = (e) => {
+                    if (e.target.tagName === "CANVAS") {
+                        e.preventDefault();
+                    }
+                }
+                ["touchstart", "touchend", "touchmove"].map(s =>
+                    document.body.addEventListener("touchmove", handleBodyTouch, {
+                        passive: false
+                    }));
 
             var drawing = new Bitmap(document.getElementById('drawing'), 32, 32,
                 (e, x, y, b) => {
@@ -330,10 +359,6 @@
                         drawing.pset(x, y, parseInt(ps[y * drawing.width + x], 16));
                     }
                 }
-                //drawing.line(2, 3, 28, 7, 10);
-                //drawing.line(28, 7, 26, 30, 10);
-                //drawing.line(26, 30, 3, 14, 10);
-                //drawing.line(3, 14, 2, 3, 10);
             } else {
                 var x, y;
                 for (x = 0; x < 32; x++) {
@@ -358,7 +383,7 @@
             key2col = "1234qwerasdfzxcv";
 
             window.onkeydown = function(e) {
-                console.log(e.keyCode);
+                //console.log(e.keyCode);
                 var new_color = key2col.indexOf(e.key);
                 if (e.code === "Delete") {
                     drawing.cls(pickedColor);
@@ -378,10 +403,7 @@
 </head>
 
 <body onload="onload();">
-    <div class="all">
-        <canvas id="drawing" oncontextmenu="event.preventDefault();" width="512" height="512"></canvas><canvas id="palette" oncontextmenu="event.preventDefault();" width="256" height="256"></canvas>
-        <div id="log" style="padding: 64px; color: #aaaaaa;"></div>
-    </div>
+    <div class="all"><canvas id="drawing" oncontextmenu="event.preventDefault();" width="512" height="512"></canvas><canvas id="palette" oncontextmenu="event.preventDefault();" width="256" height="256"></canvas><!--div id="log" style="padding: 4px; color: #aaaaaa;"></div--></div>
 </body>
 
 </html>
